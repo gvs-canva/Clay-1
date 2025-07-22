@@ -874,7 +874,7 @@ function App() {
                 )}
 
                 {/* Outreach Message - Only show if requested */}
-                {generateOutreach && analysis.outreach_message && !analysis.outreach_message.error && (
+                {formData.generateOutreach && analysis.outreach_message && !analysis.outreach_message.error && (
                   <InfoCard title="✉️ Personalized Outreach Message" icon="📧" color="teal">
                     <div className="space-y-6">
                       
