@@ -341,8 +341,8 @@ function App() {
                     
                     <MethodSelector
                       label="Technology Stack Detection"
-                      value={techStackMethod}
-                      onChange={setTechStackMethod}
+                      value={formData.techStackMethod}
+                      onChange={(value) => handleInputChange('techStackMethod', value)}
                       options={[
                         { value: 'both', label: '🔄 Both API + Custom Analysis (Recommended)' },
                         { value: 'api', label: '🌐 API-Based Detection Only' },
@@ -353,8 +353,8 @@ function App() {
 
                     <MethodSelector
                       label="Website Performance Analysis"
-                      value={websiteAnalysisMethod}
-                      onChange={setWebsiteAnalysisMethod}
+                      value={formData.websiteAnalysisMethod}
+                      onChange={(value) => handleInputChange('websiteAnalysisMethod', value)}
                       options={[
                         { value: 'both', label: '🔄 Google APIs + Custom Analysis (Recommended)' },
                         { value: 'google_apis', label: '📊 Google APIs Only (PageSpeed, Search Console)' },
