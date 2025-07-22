@@ -211,11 +211,13 @@ function App() {
                     </label>
                     <input
                       type="text"
+                      name="businessName"
                       value={businessName}
                       onChange={(e) => setBusinessName(e.target.value)}
                       placeholder="Enter business name (e.g., 'Wedding Makeover Studio')"
                       className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       required
+                      autoComplete="off"
                     />
                   </div>
 
@@ -225,11 +227,13 @@ function App() {
                     </label>
                     <input
                       type="number"
+                      name="businessCount"
                       min="1"
                       max="10"
                       value={businessCount}
                       onChange={(e) => setBusinessCount(parseInt(e.target.value) || 1)}
                       className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      autoComplete="off"
                     />
                     <p className="text-xs text-gray-500 mt-1">How many similar businesses to analyze (1-10)</p>
                   </div>
