@@ -280,40 +280,48 @@ function App() {
                       <label className="block text-sm font-medium text-gray-700 mb-1">Country</label>
                       <input
                         type="text"
+                        name="country"
                         value={country}
                         onChange={(e) => setCountry(e.target.value)}
                         placeholder="USA, UK, India..."
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        autoComplete="country"
                       />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">State/Province</label>
                       <input
                         type="text"
+                        name="state"
                         value={state}
                         onChange={(e) => setState(e.target.value)}
                         placeholder="NY, CA, London..."
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        autoComplete="address-level1"
                       />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
                       <input
                         type="text"
+                        name="city"
                         value={city}
                         onChange={(e) => setCity(e.target.value)}
                         placeholder="New York, Los Angeles..."
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        autoComplete="address-level2"
                       />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Area/District</label>
                       <input
                         type="text"
+                        name="area"
                         value={area}
                         onChange={(e) => setArea(e.target.value)}
                         placeholder="Manhattan, Downtown..."
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        autoComplete="address-level3"
                       />
                     </div>
                   </div>
