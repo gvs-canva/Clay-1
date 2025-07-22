@@ -288,8 +288,8 @@ function App() {
                       <input
                         type="text"
                         name="country"
-                        value={country}
-                        onChange={(e) => setCountry(e.target.value)}
+                        value={formData.country}
+                        onChange={(e) => handleInputChange('country', e.target.value)}
                         placeholder="USA, UK, India..."
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         autoComplete="country"
@@ -300,8 +300,8 @@ function App() {
                       <input
                         type="text"
                         name="state"
-                        value={state}
-                        onChange={(e) => setState(e.target.value)}
+                        value={formData.state}
+                        onChange={(e) => handleInputChange('state', e.target.value)}
                         placeholder="NY, CA, London..."
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         autoComplete="address-level1"
@@ -312,8 +312,8 @@ function App() {
                       <input
                         type="text"
                         name="city"
-                        value={city}
-                        onChange={(e) => setCity(e.target.value)}
+                        value={formData.city}
+                        onChange={(e) => handleInputChange('city', e.target.value)}
                         placeholder="New York, Los Angeles..."
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         autoComplete="address-level2"
@@ -324,8 +324,8 @@ function App() {
                       <input
                         type="text"
                         name="area"
-                        value={area}
-                        onChange={(e) => setArea(e.target.value)}
+                        value={formData.area}
+                        onChange={(e) => handleInputChange('area', e.target.value)}
                         placeholder="Manhattan, Downtown..."
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         autoComplete="address-level3"
