@@ -29,7 +29,7 @@ function App() {
     fetchAnalysisHistory();
   }, []);
 
-  const fetchAnalysisHistory = async () => {
+  const fetchAnalysisHistory = useCallback(async () => {
     try {
       const response = await axios.get(`${API_BASE_URL}/api/analyses`);
       if (response.data.success) {
@@ -38,17 +38,24 @@ function App() {
     } catch (error) {
       console.error('Failed to fetch analysis history:', error);
     }
-  };
+  }, []);
+
+  const handleInputChange = useCallback((field, value) => {
+    setFormData(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  }, []);
 
   const handleAnalyze = async (e) => {
     e.preventDefault();
     
-    if (!businessName.trim()) {
+    if (!formData.businessName.trim()) {
       setError('Please enter a business name');
       return;
     }
 
-    if (businessCount < 1 || businessCount > 10) {
+    if (formData.businessCount < 1 || formData.businessCount > 10) {
       setError('Number of businesses must be between 1 and 10');
       return;
     }
@@ -58,20 +65,20 @@ function App() {
     setAnalysis(null);
 
     // Build location string
-    const locationParts = [area, city, state, country].filter(part => part.trim());
+    const locationParts = [formData.area, formData.city, formData.state, formData.country].filter(part => part.trim());
     const fullLocation = locationParts.join(', ');
 
     try {
       const response = await axios.post(`${API_BASE_URL}/api/analyze-business`, {
-        business_name: businessName.trim(),
-        business_count: businessCount,
-        business_category: businessCategory.trim() || null,
-        business_subcategory: businessSubcategory.trim() || null,
+        business_name: formData.businessName.trim(),
+        business_count: formData.businessCount,
+        business_category: formData.businessCategory.trim() || null,
+        business_subcategory: formData.businessSubcategory.trim() || null,
         location: fullLocation || null,
         analysis_options: {
-          tech_stack_method: techStackMethod,
-          website_analysis_method: websiteAnalysisMethod,
-          generate_outreach: generateOutreach
+          tech_stack_method: formData.techStackMethod,
+          website_analysis_method: formData.websiteAnalysisMethod,
+          generate_outreach: formData.generateOutreach
         }
       });
 
