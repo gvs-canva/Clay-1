@@ -81,34 +81,46 @@ async def extract_multiple_businesses(business_name: str, business_count: int, l
     """Extract information for multiple businesses"""
     
     businesses = []
+    
+    # Generate multiple search queries to find different businesses
     search_queries = []
     
-    # Generate different search queries for finding multiple businesses
-    base_query = f"{business_name}"
-    if category:
-        base_query += f" {category}"
-    if location:
-        base_query += f" {location}"
-        
-    # Create variations for finding similar businesses
-    search_queries = [
-        f"{base_query}",
-        f"{category} near {location}" if category and location else f"{business_name}",
-        f"{business_name} competitors" if business_name else base_query,
-        f"best {category} {location}" if category and location else base_query,
-        f"{category} services {location}" if category and location else base_query
-    ]
+    if category and location:
+        search_queries = [
+            f"{business_name} {location}",
+            f"{category} {location} contact email phone",
+            f"best {category} services {location}",
+            f"{category} professionals {location}",
+            f"{category} business {location} website"
+        ]
+    else:
+        search_queries = [
+            f"{business_name}",
+            f"{business_name} contact email phone",
+            f"{business_name} competitors",
+            f"{business_name} similar businesses"
+        ]
     
-    # Limit to requested number of queries
-    search_queries = search_queries[:min(business_count, 5)]
+    # Add location-specific searches
+    if location:
+        location_parts = location.split(', ')
+        for part in location_parts:
+            if part.strip():
+                search_queries.append(f"{category} {part.strip()}")
+    
+    # Limit to ensure we get requested count
+    search_queries = search_queries[:business_count * 2]  # Search more to get better results
     
     for query in search_queries:
         try:
             business_info = await extract_google_business_profile(query, location)
             if business_info and business_info.get('processed_data'):
-                businesses.append(business_info)
-                if len(businesses) >= business_count:
-                    break
+                # Only add if we have meaningful data
+                processed = business_info['processed_data']
+                if processed.get('business_name') and (processed.get('email') or processed.get('phone') or processed.get('website')):
+                    businesses.append(business_info)
+                    if len(businesses) >= business_count:
+                        break
         except Exception as e:
             print(f"Error extracting business for query '{query}': {e}")
             continue
