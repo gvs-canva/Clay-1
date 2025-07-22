@@ -822,7 +822,10 @@ async def analyze_business(business_input: BusinessInput):
         }
         
         # Save to database
-        await db.business_analyses.insert_one(comprehensive_analysis)
+        result = await db.business_analyses.insert_one(comprehensive_analysis)
+        
+        # Convert ObjectId to string for JSON serialization
+        comprehensive_analysis['_id'] = str(result.inserted_id)
         
         return {
             'success': True,
