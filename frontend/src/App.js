@@ -372,8 +372,8 @@ function App() {
                     <input
                       type="checkbox"
                       id="generateOutreach"
-                      checked={generateOutreach}
-                      onChange={(e) => setGenerateOutreach(e.target.checked)}
+                      checked={formData.generateOutreach}
+                      onChange={(e) => handleInputChange('generateOutreach', e.target.checked)}
                       className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
                     />
                     <label htmlFor="generateOutreach" className="ml-3 text-sm font-medium text-gray-700">
