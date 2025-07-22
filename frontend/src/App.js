@@ -4,6 +4,71 @@ import './App.css';
 
 const API_BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8001';
 
+// Move components outside to prevent re-creation on every render
+const ScoreBar = React.memo(({ score, label, color = "blue" }) => (
+  <div className="mb-4">
+    <div className="flex justify-between items-center mb-1">
+      <span className="text-sm font-medium text-gray-700">{label}</span>
+      <span className="text-sm font-semibold text-gray-900">{Math.round(score || 0)}/100</span>
+    </div>
+    <div className="w-full bg-gray-200 rounded-full h-2">
+      <div 
+        className={`h-2 rounded-full bg-${color}-500 transition-all duration-500`}
+        style={{ width: `${Math.min(score || 0, 100)}%` }}
+      ></div>
+    </div>
+  </div>
+));
+
+const InfoCard = React.memo(({ title, children, icon, color = "blue" }) => (
+  <div className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden">
+    <div className={`bg-gradient-to-r from-${color}-500 to-${color}-600 px-6 py-4`}>
+      <div className="flex items-center">
+        <div className="text-white text-2xl mr-3">{icon}</div>
+        <h3 className="text-xl font-bold text-white">{title}</h3>
+      </div>
+    </div>
+    <div className="p-6">
+      {children}
+    </div>
+  </div>
+));
+
+const TabButton = React.memo(({ tab, label, active, onClick }) => (
+  <button
+    onClick={() => onClick(tab)}
+    className={`px-6 py-3 font-semibold rounded-lg transition-all ${
+      active
+        ? 'bg-blue-500 text-white shadow-lg'
+        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+    }`}
+  >
+    {label}
+  </button>
+));
+
+const MethodSelector = React.memo(({ label, value, onChange, options, description }) => (
+  <div className="bg-gray-50 rounded-lg p-4">
+    <label className="block text-sm font-semibold text-gray-700 mb-2">
+      {label}
+    </label>
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+    >
+      {options.map((option, index) => (
+        <option key={`${option.value}-${index}`} value={option.value}>
+          {option.label}
+        </option>
+      ))}
+    </select>
+    {description && (
+      <p className="text-xs text-gray-500 mt-1">{description}</p>
+    )}
+  </div>
+));
+
 function App() {
   const [formData, setFormData] = useState({
     businessName: '',
