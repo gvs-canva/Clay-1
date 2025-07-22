@@ -247,10 +247,12 @@ function App() {
                     </label>
                     <input
                       type="text"
+                      name="businessCategory"
                       value={businessCategory}
                       onChange={(e) => setBusinessCategory(e.target.value)}
                       placeholder="e.g., 'Makeup Artist', 'Restaurant', 'Consulting'"
                       className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      autoComplete="off"
                     />
                   </div>
 
@@ -260,10 +262,12 @@ function App() {
                     </label>
                     <input
                       type="text"
+                      name="businessSubcategory"
                       value={businessSubcategory}
                       onChange={(e) => setBusinessSubcategory(e.target.value)}
                       placeholder="e.g., 'Bridal Makeup', 'Fine Dining', 'Management Consulting'"
                       className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      autoComplete="off"
                     />
                   </div>
                 </div>
