@@ -1,23 +1,23 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import './App.css';
 
 const API_BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8001';
 
 function App() {
-  const [businessName, setBusinessName] = useState('');
-  const [businessCount, setBusinessCount] = useState(1);
-  const [businessCategory, setBusinessCategory] = useState('');
-  const [businessSubcategory, setBusinessSubcategory] = useState('');
-  const [country, setCountry] = useState('');
-  const [state, setState] = useState('');
-  const [city, setCity] = useState('');
-  const [area, setArea] = useState('');
-  
-  // Analysis Options
-  const [techStackMethod, setTechStackMethod] = useState('both'); // 'api', 'custom', 'both'
-  const [websiteAnalysisMethod, setWebsiteAnalysisMethod] = useState('both'); // 'google_apis', 'custom', 'both'
-  const [generateOutreach, setGenerateOutreach] = useState(false);
+  const [formData, setFormData] = useState({
+    businessName: '',
+    businessCount: 1,
+    businessCategory: '',
+    businessSubcategory: '',
+    country: '',
+    state: '',
+    city: '',
+    area: '',
+    techStackMethod: 'both',
+    websiteAnalysisMethod: 'both',
+    generateOutreach: false
+  });
   
   const [loading, setLoading] = useState(false);
   const [analysis, setAnalysis] = useState(null);
