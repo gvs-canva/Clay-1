@@ -233,41 +233,49 @@ async def process_business_data(api_results: Dict, scraped_results: Dict, busine
         chat = LlmChat(
             api_key=GEMINI_API_KEY,
             session_id=f"business_extraction_{uuid.uuid4()}",
-            system_message="You are an expert business data extraction analyst. Extract structured business information from search results and web data."
+            system_message="You are an expert business data extraction analyst. Your job is to find and extract contact information (email, phone, website, address) from search results and web data. Be very thorough in finding contact details."
         ).with_model("gemini", "gemini-2.5-pro-preview-05-06")
         
         prompt = f"""
-        Extract comprehensive business information from the following search results and data:
+        CRITICAL TASK: Extract comprehensive business contact information from search results.
         
         Business Name: {business_name}
-        Search Data: {json.dumps(all_data, default=str)}
+        Search Results Data: {json.dumps(all_data, default=str)[:8000]}  # Limit to avoid token limits
         
-        Please extract and return ONLY a JSON object with this exact structure:
+        INSTRUCTIONS:
+        1. Look through ALL search results, snippets, titles, and descriptions
+        2. Find email addresses (look for @, .com, .in, etc.)
+        3. Find phone numbers (look for digits, country codes, formats like +91, (xxx) xxx-xxxx)
+        4. Find websites (look for www., http, .com, .in, etc.)
+        5. Find addresses (look for city names, street names, postal codes)
+        6. Extract social media links (LinkedIn, Facebook, Instagram)
+        
+        Return ONLY a JSON object with this EXACT structure:
         {{
-            "business_name": "extracted business name or provided name",
-            "email": "extracted email address or null",
-            "phone": "extracted phone number or null", 
-            "website": "extracted website URL or null",
-            "address": "extracted physical address or null",
+            "business_name": "exact business name found or provided name",
+            "email": "email@example.com or null if not found",
+            "phone": "+91-xxxxxxxxxx or null if not found", 
+            "website": "https://website.com or null if not found",
+            "address": "complete address or null if not found",
             "social_media": {{
-                "linkedin": "linkedin url or null",
-                "facebook": "facebook url or null", 
-                "instagram": "instagram url or null",
-                "twitter": "twitter url or null"
+                "linkedin": "linkedin_url or null",
+                "facebook": "facebook_url or null", 
+                "instagram": "instagram_url or null"
             }},
-            "description": "business description or services offered",
-            "services": ["list", "of", "services", "offered"],
+            "description": "business description from search results",
+            "services": ["service1", "service2"],
             "business_hours": "operating hours if found",
-            "years_in_business": "how long in business if mentioned",
-            "confidence_score": 0.85
+            "confidence_score": 0.95
         }}
         
-        IMPORTANT: 
-        - If information is not found, use null values (not "Not found" or empty strings)
-        - Extract contact information carefully from snippets and search results
-        - Look for patterns like email addresses, phone numbers, website URLs
-        - Include confidence score based on data quality (0.0 to 1.0)
-        - Return ONLY the JSON object, no additional text
+        CRITICAL: 
+        - Search thoroughly through ALL provided data for contact information
+        - Look for email patterns: word@domain.com, contact@business.com, info@business.com
+        - Look for phone patterns: numbers with 10+ digits, country codes, parentheses
+        - Look for website patterns: www.business.com, business.com, https://business.com
+        - If you find partial information, include it
+        - Set confidence_score high (0.8+) if you find real contact info, low (0.2-) if minimal data
+        - Return ONLY the JSON object, no other text
         """
         
         user_message = UserMessage(text=prompt)
@@ -292,47 +300,43 @@ async def process_business_data(api_results: Dict, scraped_results: Dict, busine
                     if field not in parsed_data:
                         parsed_data[field] = None
                 
+                # Additional validation and cleaning
+                if parsed_data.get('email') and '@' not in str(parsed_data['email']):
+                    parsed_data['email'] = None
+                
+                if parsed_data.get('phone') and len(str(parsed_data['phone']).replace(' ', '').replace('-', '').replace('(', '').replace(')', '')) < 8:
+                    parsed_data['phone'] = None
+                
+                if parsed_data.get('website') and not ('http' in str(parsed_data['website']) or '.com' in str(parsed_data['website']) or '.in' in str(parsed_data['website'])):
+                    parsed_data['website'] = None
+                
                 return parsed_data
             else:
-                return {
-                    "business_name": business_name,
-                    "email": None,
-                    "phone": None,
-                    "website": None,
-                    "address": None,
-                    "social_media": {},
-                    "description": "Business data extraction in progress",
-                    "services": [],
-                    "confidence_score": 0.3,
-                    "error": "Could not parse AI response"
-                }
+                return create_fallback_response(business_name, "Could not parse AI response")
         except json.JSONDecodeError as e:
-            return {
-                "business_name": business_name,
-                "email": None,
-                "phone": None,
-                "website": None,
-                "address": None,
-                "social_media": {},
-                "description": "Business data extraction failed",
-                "services": [],
-                "confidence_score": 0.1,
-                "error": f"JSON parsing error: {str(e)}"
-            }
+            return create_fallback_response(business_name, f"JSON parsing error: {str(e)}")
             
     except Exception as e:
-        return {
-            "business_name": business_name,
-            "email": None,
-            "phone": None,
-            "website": None,
-            "address": None,
-            "social_media": {},
-            "description": "AI processing failed",
-            "services": [],
-            "confidence_score": 0.0,
-            "error": f"AI processing failed: {str(e)}"
-        }
+        return create_fallback_response(business_name, f"AI processing failed: {str(e)}")
+
+def create_fallback_response(business_name: str, error: str) -> Dict[str, Any]:
+    """Create fallback response when AI processing fails"""
+    return {
+        "business_name": business_name,
+        "email": None,
+        "phone": None,
+        "website": None,
+        "address": None,
+        "social_media": {
+            "linkedin": None,
+            "facebook": None,
+            "instagram": None
+        },
+        "description": "Contact information extraction in progress...",
+        "services": [],
+        "confidence_score": 0.1,
+        "error": error
+    }
 
 async def discover_linkedin_profile(business_name: str, website: str = "") -> Dict[str, Any]:
     """Discover LinkedIn profile using boolean search"""
