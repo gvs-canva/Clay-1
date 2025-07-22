@@ -134,37 +134,48 @@ async def extract_multiple_businesses(business_name: str, business_count: int, l
 
 async def extract_google_business_profile(business_name: str, location: str = "") -> Dict[str, Any]:
     """Extract business information using Google Custom Search API and web scraping"""
-    search_query = f"{business_name} {location} contact email website phone"
     
-    # Google Custom Search API approach
-    api_results = {}
-    if GOOGLE_CUSTOM_SEARCH_API_KEY and GOOGLE_SEARCH_ENGINE_ID:
-        try:
-            url = f"https://www.googleapis.com/customsearch/v1"
-            params = {
-                'key': GOOGLE_CUSTOM_SEARCH_API_KEY,
-                'cx': GOOGLE_SEARCH_ENGINE_ID,
-                'q': search_query,
-                'num': 10
-            }
-            
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url, params=params) as response:
-                    if response.status == 200:
-                        data = await response.json()
-                        api_results = {
-                            'source': 'google_api',
-                            'results': data.get('items', [])
-                        }
-        except Exception as e:
-            print(f"Google API search failed: {e}")
+    # Create more targeted search queries for contact information
+    search_queries = [
+        f"{business_name} {location} contact email phone website",
+        f"{business_name} {location} phone number email",
+        f'"{business_name}" {location} contact details',
+        f"{business_name} {location} business listing"
+    ]
+    
+    all_results = []
+    
+    # Google Custom Search API approach - try multiple queries
+    for search_query in search_queries:
+        if GOOGLE_CUSTOM_SEARCH_API_KEY and GOOGLE_SEARCH_ENGINE_ID:
+            try:
+                url = f"https://www.googleapis.com/customsearch/v1"
+                params = {
+                    'key': GOOGLE_CUSTOM_SEARCH_API_KEY,
+                    'cx': GOOGLE_SEARCH_ENGINE_ID,
+                    'q': search_query,
+                    'num': 10
+                }
+                
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(url, params=params) as response:
+                        if response.status == 200:
+                            data = await response.json()
+                            items = data.get('items', [])
+                            all_results.extend(items)
+                        else:
+                            print(f"Google API error {response.status} for query: {search_query}")
+            except Exception as e:
+                print(f"Google API search failed for '{search_query}': {e}")
     
     # Custom web scraping approach
     scraped_results = {}
     try:
-        search_url = f"https://www.google.com/search?q={urllib.parse.quote(search_query)}"
+        # Try the first search query for scraping
+        main_search_query = search_queries[0]
+        search_url = f"https://www.google.com/search?q={urllib.parse.quote(main_search_query)}"
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         }
         
         async with aiohttp.ClientSession() as session:
@@ -173,26 +184,38 @@ async def extract_google_business_profile(business_name: str, location: str = ""
                     html = await response.text()
                     soup = BeautifulSoup(html, 'html.parser')
                     
-                    # Extract basic business info from search results
                     scraped_results = {
                         'source': 'custom_scraping',
                         'business_name': business_name,
                         'search_snippets': []
                     }
                     
-                    # Extract search result snippets
-                    for result in soup.find_all('div', class_='g')[:5]:
-                        snippet = result.find('span')
-                        if snippet:
-                            scraped_results['search_snippets'].append(snippet.get_text())
+                    # Extract search result snippets and look for contact info
+                    for result in soup.find_all('div', class_=['g', 'tF2Cxc'])[:10]:
+                        snippet_elem = result.find(['span', 'div'], class_=['st', 'IsZvec'])
+                        if snippet_elem:
+                            snippet_text = snippet_elem.get_text()
+                            scraped_results['search_snippets'].append(snippet_text)
+                        
+                        # Look for direct contact info in search results
+                        title_elem = result.find('h3')
+                        if title_elem:
+                            scraped_results['search_snippets'].append(title_elem.get_text())
                     
     except Exception as e:
         print(f"Custom scraping failed: {e}")
     
-    return {
-        'api_results': api_results,
+    # Process and combine all results
+    combined_results = {
+        'api_results': {'results': all_results, 'total_items': len(all_results)},
         'scraped_results': scraped_results,
-        'processed_data': await process_business_data(api_results, scraped_results, business_name)
+        'search_queries': search_queries
+    }
+    
+    return {
+        'api_results': combined_results['api_results'],
+        'scraped_results': combined_results['scraped_results'],
+        'processed_data': await process_business_data(combined_results['api_results'], combined_results['scraped_results'], business_name)
     }
 
 async def process_business_data(api_results: Dict, scraped_results: Dict, business_name: str) -> Dict[str, Any]:
