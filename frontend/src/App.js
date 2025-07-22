@@ -6,8 +6,19 @@ const API_BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8001
 
 function App() {
   const [businessName, setBusinessName] = useState('');
+  const [businessCount, setBusinessCount] = useState(1);
   const [businessCategory, setBusinessCategory] = useState('');
-  const [location, setLocation] = useState('');
+  const [businessSubcategory, setBusinessSubcategory] = useState('');
+  const [country, setCountry] = useState('');
+  const [state, setState] = useState('');
+  const [city, setCity] = useState('');
+  const [area, setArea] = useState('');
+  
+  // Analysis Options
+  const [techStackMethod, setTechStackMethod] = useState('both'); // 'api', 'custom', 'both'
+  const [websiteAnalysisMethod, setWebsiteAnalysisMethod] = useState('both'); // 'google_apis', 'custom', 'both'
+  const [generateOutreach, setGenerateOutreach] = useState(false);
+  
   const [loading, setLoading] = useState(false);
   const [analysis, setAnalysis] = useState(null);
   const [error, setError] = useState('');
@@ -37,15 +48,31 @@ function App() {
       return;
     }
 
+    if (businessCount < 1 || businessCount > 10) {
+      setError('Number of businesses must be between 1 and 10');
+      return;
+    }
+
     setLoading(true);
     setError('');
     setAnalysis(null);
 
+    // Build location string
+    const locationParts = [area, city, state, country].filter(part => part.trim());
+    const fullLocation = locationParts.join(', ');
+
     try {
       const response = await axios.post(`${API_BASE_URL}/api/analyze-business`, {
         business_name: businessName.trim(),
+        business_count: businessCount,
         business_category: businessCategory.trim() || null,
-        location: location.trim() || null
+        business_subcategory: businessSubcategory.trim() || null,
+        location: fullLocation || null,
+        analysis_options: {
+          tech_stack_method: techStackMethod,
+          website_analysis_method: websiteAnalysisMethod,
+          generate_outreach: generateOutreach
+        }
       });
 
       if (response.data.success) {
@@ -78,12 +105,12 @@ function App() {
     <div className="mb-4">
       <div className="flex justify-between items-center mb-1">
         <span className="text-sm font-medium text-gray-700">{label}</span>
-        <span className="text-sm font-semibold text-gray-900">{Math.round(score)}/100</span>
+        <span className="text-sm font-semibold text-gray-900">{Math.round(score || 0)}/100</span>
       </div>
       <div className="w-full bg-gray-200 rounded-full h-2">
         <div 
           className={`h-2 rounded-full bg-${color}-500 transition-all duration-500`}
-          style={{ width: `${Math.min(score, 100)}%` }}
+          style={{ width: `${Math.min(score || 0, 100)}%` }}
         ></div>
       </div>
     </div>
@@ -114,6 +141,28 @@ function App() {
     >
       {label}
     </button>
+  );
+
+  const MethodSelector = ({ label, value, onChange, options, description }) => (
+    <div className="bg-gray-50 rounded-lg p-4">
+      <label className="block text-sm font-semibold text-gray-700 mb-2">
+        {label}
+      </label>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+      >
+        {options.map(option => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+      {description && (
+        <p className="text-xs text-gray-500 mt-1">{description}</p>
+      )}
+    </div>
   );
 
   return (
@@ -151,22 +200,42 @@ function App() {
         {activeTab === 'analyzer' && (
           <div className="space-y-8">
             {/* Analysis Form */}
-            <InfoCard title="Business Analysis Input" icon="🎯" color="blue">
+            <InfoCard title="Business Analysis Configuration" icon="🎯" color="blue">
               <form onSubmit={handleAnalyze} className="space-y-6">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Business Name *
-                  </label>
-                  <input
-                    type="text"
-                    value={businessName}
-                    onChange={(e) => setBusinessName(e.target.value)}
-                    placeholder="Enter business name (e.g., 'Wedding Makeover Studio')"
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    required
-                  />
+                
+                {/* Basic Business Information */}
+                <div className="grid md:grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      Business Name *
+                    </label>
+                    <input
+                      type="text"
+                      value={businessName}
+                      onChange={(e) => setBusinessName(e.target.value)}
+                      placeholder="Enter business name (e.g., 'Wedding Makeover Studio')"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      Number of Business Details Needed
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="10"
+                      value={businessCount}
+                      onChange={(e) => setBusinessCount(parseInt(e.target.value) || 1)}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">How many similar businesses to analyze (1-10)</p>
+                  </div>
                 </div>
 
+                {/* Business Categories */}
                 <div className="grid md:grid-cols-2 gap-6">
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-2">
@@ -176,23 +245,121 @@ function App() {
                       type="text"
                       value={businessCategory}
                       onChange={(e) => setBusinessCategory(e.target.value)}
-                      placeholder="e.g., 'Makeup Artist', 'Restaurant'"
+                      placeholder="e.g., 'Makeup Artist', 'Restaurant', 'Consulting'"
                       className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
                   </div>
 
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-2">
-                      Location
+                      Subcategory (Optional)
                     </label>
                     <input
                       type="text"
-                      value={location}
-                      onChange={(e) => setLocation(e.target.value)}
-                      placeholder="e.g., 'New York, NY'"
+                      value={businessSubcategory}
+                      onChange={(e) => setBusinessSubcategory(e.target.value)}
+                      placeholder="e.g., 'Bridal Makeup', 'Fine Dining', 'Management Consulting'"
                       className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
                   </div>
+                </div>
+
+                {/* Detailed Location */}
+                <div>
+                  <h4 className="text-lg font-semibold text-gray-800 mb-3">Location Details (All Optional)</h4>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Country</label>
+                      <input
+                        type="text"
+                        value={country}
+                        onChange={(e) => setCountry(e.target.value)}
+                        placeholder="USA, UK, India..."
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">State/Province</label>
+                      <input
+                        type="text"
+                        value={state}
+                        onChange={(e) => setState(e.target.value)}
+                        placeholder="NY, CA, London..."
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
+                      <input
+                        type="text"
+                        value={city}
+                        onChange={(e) => setCity(e.target.value)}
+                        placeholder="New York, Los Angeles..."
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Area/District</label>
+                      <input
+                        type="text"
+                        value={area}
+                        onChange={(e) => setArea(e.target.value)}
+                        placeholder="Manhattan, Downtown..."
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Analysis Method Selection */}
+                <div>
+                  <h4 className="text-lg font-semibold text-gray-800 mb-4">Analysis Method Preferences</h4>
+                  <div className="grid md:grid-cols-2 gap-6">
+                    
+                    <MethodSelector
+                      label="Technology Stack Detection"
+                      value={techStackMethod}
+                      onChange={setTechStackMethod}
+                      options={[
+                        { value: 'both', label: '🔄 Both API + Custom Analysis (Recommended)' },
+                        { value: 'api', label: '🌐 API-Based Detection Only' },
+                        { value: 'custom', label: '🛠️ Custom Built Analysis Only' }
+                      ]}
+                      description="Choose how to detect website technologies and tools"
+                    />
+
+                    <MethodSelector
+                      label="Website Performance Analysis"
+                      value={websiteAnalysisMethod}
+                      onChange={setWebsiteAnalysisMethod}
+                      options={[
+                        { value: 'both', label: '🔄 Google APIs + Custom Analysis (Recommended)' },
+                        { value: 'google_apis', label: '📊 Google APIs Only (PageSpeed, Search Console)' },
+                        { value: 'custom', label: '🛠️ Custom Built Analysis Only' }
+                      ]}
+                      description="Choose method for SEO and performance analysis"
+                    />
+
+                  </div>
+                </div>
+
+                {/* Outreach Email Generation */}
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                  <div className="flex items-center">
+                    <input
+                      type="checkbox"
+                      id="generateOutreach"
+                      checked={generateOutreach}
+                      onChange={(e) => setGenerateOutreach(e.target.checked)}
+                      className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                    />
+                    <label htmlFor="generateOutreach" className="ml-3 text-sm font-medium text-gray-700">
+                      📧 Generate Personalized Outreach Email
+                    </label>
+                  </div>
+                  <p className="text-xs text-gray-600 mt-2 ml-7">
+                    Check this if you want AI to create a personalized outreach email with subject line and intro based on the analysis
+                  </p>
                 </div>
 
                 <button
@@ -203,10 +370,10 @@ function App() {
                   {loading ? (
                     <div className="flex items-center justify-center">
                       <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white mr-3"></div>
-                      Analyzing Business... (This may take 30-60 seconds)
+                      Analyzing Business... (This may take 30-90 seconds)
                     </div>
                   ) : (
-                    '🔍 Analyze Business'
+                    '🔍 Start Business Intelligence Analysis'
                   )}
                 </button>
 
@@ -227,45 +394,136 @@ function App() {
             {/* Analysis Results */}
             {analysis && (
               <div className="space-y-8">
+                
                 {/* Business Information */}
-                <InfoCard title="Business Profile" icon="🏢" color="green">
+                <InfoCard title="📋 Business Profile & Contact Information" icon="🏢" color="green">
                   <div className="grid md:grid-cols-2 gap-6">
+                    
+                    {/* Primary Business Info */}
                     <div>
-                      <h4 className="font-semibold text-gray-800 mb-3">Contact Information</h4>
-                      {analysis.business_info?.processed_data ? (
-                        <div className="space-y-2">
-                          <p><strong>Name:</strong> {analysis.business_info.processed_data.business_name || 'N/A'}</p>
-                          <p><strong>Email:</strong> {analysis.business_info.processed_data.email || 'N/A'}</p>
-                          <p><strong>Phone:</strong> {analysis.business_info.processed_data.phone || 'N/A'}</p>
-                          <p><strong>Website:</strong> 
-                            {analysis.business_info.processed_data.website ? (
-                              <a href={analysis.business_info.processed_data.website} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline ml-1">
-                                {analysis.business_info.processed_data.website}
-                              </a>
-                            ) : ' N/A'}
-                          </p>
-                          <p><strong>Address:</strong> {analysis.business_info.processed_data.address || 'N/A'}</p>
+                      <h4 className="font-semibold text-gray-800 mb-3">📞 Contact Information</h4>
+                      {analysis.business_info?.processed_data && !analysis.business_info.processed_data.error ? (
+                        <div className="space-y-3">
+                          <div className="bg-gray-50 rounded-lg p-3">
+                            <div className="flex items-center mb-2">
+                              <span className="text-lg mr-2">🏢</span>
+                              <strong>Business Name:</strong>
+                            </div>
+                            <p className="ml-6 text-gray-700">{analysis.business_info.processed_data.business_name || 'Not found'}</p>
+                          </div>
+                          
+                          <div className="bg-gray-50 rounded-lg p-3">
+                            <div className="flex items-center mb-2">
+                              <span className="text-lg mr-2">📧</span>
+                              <strong>Email:</strong>
+                            </div>
+                            <p className="ml-6 text-gray-700">{analysis.business_info.processed_data.email || 'Not found'}</p>
+                          </div>
+                          
+                          <div className="bg-gray-50 rounded-lg p-3">
+                            <div className="flex items-center mb-2">
+                              <span className="text-lg mr-2">📞</span>
+                              <strong>Phone:</strong>
+                            </div>
+                            <p className="ml-6 text-gray-700">{analysis.business_info.processed_data.phone || 'Not found'}</p>
+                          </div>
+                          
+                          <div className="bg-gray-50 rounded-lg p-3">
+                            <div className="flex items-center mb-2">
+                              <span className="text-lg mr-2">🌐</span>
+                              <strong>Website:</strong>
+                            </div>
+                            <div className="ml-6">
+                              {analysis.business_info.processed_data.website ? (
+                                <a href={analysis.business_info.processed_data.website} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline break-all">
+                                  {analysis.business_info.processed_data.website}
+                                </a>
+                              ) : (
+                                <span className="text-gray-700">Not found</span>
+                              )}
+                            </div>
+                          </div>
+                          
+                          <div className="bg-gray-50 rounded-lg p-3">
+                            <div className="flex items-center mb-2">
+                              <span className="text-lg mr-2">📍</span>
+                              <strong>Address:</strong>
+                            </div>
+                            <p className="ml-6 text-gray-700">{analysis.business_info.processed_data.address || 'Not found'}</p>
+                          </div>
+                          
+                          {analysis.business_info.processed_data.description && (
+                            <div className="bg-blue-50 rounded-lg p-3">
+                              <div className="flex items-center mb-2">
+                                <span className="text-lg mr-2">📄</span>
+                                <strong>Description:</strong>
+                              </div>
+                              <p className="ml-6 text-gray-700">{analysis.business_info.processed_data.description}</p>
+                            </div>
+                          )}
+                          
+                          {analysis.business_info.processed_data.confidence_score && (
+                            <div className="mt-4">
+                              <ScoreBar 
+                                score={analysis.business_info.processed_data.confidence_score * 100}
+                                label="Data Accuracy Confidence"
+                                color="green"
+                              />
+                            </div>
+                          )}
                         </div>
                       ) : (
-                        <p className="text-gray-500">Business information extraction in progress...</p>
+                        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                          <p className="text-yellow-800">
+                            <strong>⚠️ Business information extraction in progress or limited data available.</strong>
+                          </p>
+                          {analysis.business_info?.processed_data?.error && (
+                            <p className="text-yellow-700 mt-2">Error: {analysis.business_info.processed_data.error}</p>
+                          )}
+                        </div>
                       )}
                     </div>
 
+                    {/* LinkedIn & Social Media */}
                     <div>
-                      <h4 className="font-semibold text-gray-800 mb-3">LinkedIn Profile</h4>
+                      <h4 className="font-semibold text-gray-800 mb-3">🔗 Social Media Presence</h4>
+                      
+                      {/* LinkedIn */}
                       {analysis.linkedin_profile?.linkedin_profiles?.length > 0 ? (
-                        <div className="space-y-2">
+                        <div className="space-y-3">
+                          <h5 className="font-medium text-gray-700">LinkedIn Profiles Found:</h5>
                           {analysis.linkedin_profile.linkedin_profiles.map((profile, idx) => (
-                            <div key={idx} className="border-l-4 border-blue-500 pl-3">
-                              <a href={profile.url} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline font-medium">
+                            <div key={idx} className="border-l-4 border-blue-500 bg-blue-50 pl-4 py-2 rounded">
+                              <a href={profile.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline font-medium block">
                                 {profile.title}
                               </a>
-                              <p className="text-sm text-gray-600">{profile.snippet}</p>
+                              <p className="text-sm text-gray-600 mt-1">{profile.snippet}</p>
                             </div>
                           ))}
                         </div>
                       ) : (
-                        <p className="text-gray-500">LinkedIn profile not found</p>
+                        <div className="bg-gray-50 rounded-lg p-4">
+                          <p className="text-gray-600">🔍 LinkedIn profile not found or search in progress</p>
+                        </div>
+                      )}
+
+                      {/* Social Media from Business Data */}
+                      {analysis.business_info?.processed_data?.social_media && (
+                        <div className="mt-4">
+                          <h5 className="font-medium text-gray-700 mb-2">Other Social Media:</h5>
+                          <div className="space-y-2">
+                            {Object.entries(analysis.business_info.processed_data.social_media).map(([platform, url]) => (
+                              url && (
+                                <div key={platform} className="flex items-center">
+                                  <span className="capitalize font-medium w-20">{platform}:</span>
+                                  <a href={url} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline ml-2">
+                                    {url}
+                                  </a>
+                                </div>
+                              )
+                            ))}
+                          </div>
+                        </div>
                       )}
                     </div>
                   </div>
@@ -273,13 +531,32 @@ function App() {
 
                 {/* Technology Stack */}
                 {analysis.tech_stack && !analysis.tech_stack.error && (
-                  <InfoCard title="Technology Stack Analysis" icon="⚙️" color="indigo">
+                  <InfoCard title="🛠️ Technology Stack Analysis" icon="⚙️" color="indigo">
+                    <div className="mb-4">
+                      <p className="text-sm text-gray-600">
+                        <strong>Analysis Method:</strong> {
+                          analysis.analysis_options?.tech_stack_method === 'both' ? '🔄 API + Custom Analysis' :
+                          analysis.analysis_options?.tech_stack_method === 'api' ? '🌐 API-Based Detection' :
+                          '🛠️ Custom Built Analysis'
+                        }
+                      </p>
+                    </div>
+                    
                     <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
                       {Object.entries(analysis.tech_stack).map(([category, technologies]) => {
                         if (Array.isArray(technologies) && technologies.length > 0) {
                           return (
                             <div key={category} className="bg-gray-50 rounded-lg p-4">
-                              <h5 className="font-semibold text-gray-800 mb-3 capitalize">
+                              <h5 className="font-semibold text-gray-800 mb-3 capitalize flex items-center">
+                                <span className="mr-2">
+                                  {category === 'cms' && '🖥️'}
+                                  {category === 'analytics' && '📊'}
+                                  {category === 'advertising' && '📢'}
+                                  {category === 'seo_tools' && '🔍'}
+                                  {category === 'automation' && '🤖'}
+                                  {category === 'hosting' && '🌐'}
+                                  {category === 'security' && '🔒'}
+                                </span>
                                 {category.replace('_', ' ')}
                               </h5>
                               <div className="space-y-2">
@@ -315,27 +592,44 @@ function App() {
 
                 {/* Website Analysis */}
                 {analysis.website_analysis && !analysis.website_analysis.error && (
-                  <InfoCard title="Website Performance Analysis" icon="📊" color="purple">
-                    <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
+                  <InfoCard title="📊 Website Performance Analysis" icon="📈" color="purple">
+                    <div className="mb-4">
+                      <p className="text-sm text-gray-600">
+                        <strong>Analysis Method:</strong> {
+                          analysis.analysis_options?.website_analysis_method === 'both' ? '🔄 Google APIs + Custom Analysis' :
+                          analysis.analysis_options?.website_analysis_method === 'google_apis' ? '📊 Google APIs Only' :
+                          '🛠️ Custom Analysis Only'
+                        }
+                      </p>
+                    </div>
+
+                    <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
                       {analysis.website_analysis.seo_score !== undefined && (
                         <ScoreBar 
                           score={analysis.website_analysis.seo_score}
-                          label="SEO Score"
+                          label="🔍 SEO Score"
                           color="green"
                         />
                       )}
                       {analysis.website_analysis.design_quality_score !== undefined && (
                         <ScoreBar 
                           score={analysis.website_analysis.design_quality_score}
-                          label="Design Quality"
+                          label="🎨 Design Quality"
                           color="blue"
                         />
                       )}
                       {analysis.website_analysis.conversion_tracking?.conversion_tracking_score !== undefined && (
                         <ScoreBar 
                           score={analysis.website_analysis.conversion_tracking.conversion_tracking_score}
-                          label="Conversion Tracking"
+                          label="📊 Conversion Tracking"
                           color="purple"
+                        />
+                      )}
+                      {analysis.website_analysis.email_marketing?.email_automation_score !== undefined && (
+                        <ScoreBar 
+                          score={analysis.website_analysis.email_marketing.email_automation_score}
+                          label="📧 Email Marketing"
+                          color="orange"
                         />
                       )}
                     </div>
@@ -344,25 +638,25 @@ function App() {
                       {/* SEO Details */}
                       {analysis.website_analysis.title_tag && (
                         <div className="bg-gray-50 rounded-lg p-4">
-                          <h5 className="font-semibold text-gray-800 mb-3">SEO Elements</h5>
-                          <div className="space-y-2 text-sm">
+                          <h5 className="font-semibold text-gray-800 mb-3">🔍 SEO Elements</h5>
+                          <div className="space-y-3 text-sm">
                             <div>
-                              <span className="font-medium">Title:</span>
-                              <p className="text-gray-600 break-words">{analysis.website_analysis.title_tag.content}</p>
+                              <span className="font-medium">Title Tag:</span>
+                              <p className="text-gray-600 break-words mt-1">{analysis.website_analysis.title_tag.content}</p>
                               <span className={`text-xs px-2 py-1 rounded-full ${
                                 analysis.website_analysis.title_tag.optimal ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
                               }`}>
-                                {analysis.website_analysis.title_tag.length} chars
+                                {analysis.website_analysis.title_tag.length} chars {analysis.website_analysis.title_tag.optimal ? '✓' : '⚠️'}
                               </span>
                             </div>
                             {analysis.website_analysis.meta_description && (
                               <div>
                                 <span className="font-medium">Meta Description:</span>
-                                <p className="text-gray-600 break-words">{analysis.website_analysis.meta_description.content}</p>
+                                <p className="text-gray-600 break-words mt-1">{analysis.website_analysis.meta_description.content}</p>
                                 <span className={`text-xs px-2 py-1 rounded-full ${
                                   analysis.website_analysis.meta_description.optimal ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
                                 }`}>
-                                  {analysis.website_analysis.meta_description.length} chars
+                                  {analysis.website_analysis.meta_description.length} chars {analysis.website_analysis.meta_description.optimal ? '✓' : '⚠️'}
                                 </span>
                               </div>
                             )}
@@ -370,17 +664,21 @@ function App() {
                         </div>
                       )}
 
-                      {/* Conversion Tracking */}
+                      {/* Tracking Tools */}
                       {analysis.website_analysis.conversion_tracking && (
                         <div className="bg-gray-50 rounded-lg p-4">
-                          <h5 className="font-semibold text-gray-800 mb-3">Tracking Tools</h5>
+                          <h5 className="font-semibold text-gray-800 mb-3">📊 Tracking & Analytics</h5>
                           <div className="space-y-2 text-sm">
                             {Object.entries(analysis.website_analysis.conversion_tracking).map(([tool, detected]) => {
-                              if (typeof detected === 'boolean' && detected) {
+                              if (typeof detected === 'boolean') {
                                 return (
-                                  <div key={tool} className="flex items-center">
-                                    <span className="w-2 h-2 bg-green-500 rounded-full mr-2"></span>
+                                  <div key={tool} className="flex items-center justify-between">
                                     <span className="capitalize">{tool.replace('_', ' ')}</span>
+                                    <span className={`text-xs px-2 py-1 rounded-full ${
+                                      detected ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'
+                                    }`}>
+                                      {detected ? '✓ Active' : '✗ Not Found'}
+                                    </span>
                                   </div>
                                 );
                               }
@@ -390,18 +688,19 @@ function App() {
                         </div>
                       )}
 
-                      {/* Email Marketing */}
+                      {/* Marketing Tools */}
                       {analysis.website_analysis.email_marketing && (
                         <div className="bg-gray-50 rounded-lg p-4">
-                          <h5 className="font-semibold text-gray-800 mb-3">Email Marketing</h5>
+                          <h5 className="font-semibold text-gray-800 mb-3">📧 Email Marketing Tools</h5>
                           <div className="space-y-2 text-sm">
-                            {analysis.website_analysis.email_marketing.tools_detected?.map((tool, idx) => (
-                              <div key={idx} className="flex items-center">
-                                <span className="w-2 h-2 bg-blue-500 rounded-full mr-2"></span>
-                                <span className="capitalize">{tool.replace('_', ' ')}</span>
-                              </div>
-                            ))}
-                            {analysis.website_analysis.email_marketing.tools_detected?.length === 0 && (
+                            {analysis.website_analysis.email_marketing.tools_detected?.length > 0 ? (
+                              analysis.website_analysis.email_marketing.tools_detected.map((tool, idx) => (
+                                <div key={idx} className="flex items-center">
+                                  <span className="w-2 h-2 bg-blue-500 rounded-full mr-2"></span>
+                                  <span className="capitalize">{tool.replace('_', ' ')}</span>
+                                </div>
+                              ))
+                            ) : (
                               <p className="text-gray-500">No email marketing tools detected</p>
                             )}
                           </div>
@@ -413,35 +712,36 @@ function App() {
 
                 {/* Business Intelligence */}
                 {analysis.business_intelligence && !analysis.business_intelligence.error && (
-                  <InfoCard title="Business Intelligence & Investment Analysis" icon="🎯" color="orange">
+                  <InfoCard title="🎯 Business Intelligence & Investment Analysis" icon="📈" color="orange">
                     <div className="space-y-6">
+                      
                       {/* Key Scores */}
                       <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
                         {analysis.business_intelligence.business_intent_analysis?.digital_readiness_score && (
                           <ScoreBar 
                             score={analysis.business_intelligence.business_intent_analysis.digital_readiness_score * 100}
-                            label="Digital Readiness"
+                            label="🚀 Digital Readiness"
                             color="blue"
                           />
                         )}
                         {analysis.business_intelligence.digital_marketing_signals?.website_conversion_potential && (
                           <ScoreBar 
                             score={analysis.business_intelligence.digital_marketing_signals.website_conversion_potential * 100}
-                            label="Conversion Potential"
+                            label="💰 Conversion Potential"
                             color="green"
                           />
                         )}
                         {analysis.business_intelligence.investment_recommendation?.overall_score && (
                           <ScoreBar 
                             score={analysis.business_intelligence.investment_recommendation.overall_score * 100}
-                            label="Investment Score"
+                            label="💎 Investment Score"
                             color="purple"
                           />
                         )}
                         {analysis.business_intelligence.sentiment_analysis?.online_reputation_score && (
                           <ScoreBar 
                             score={analysis.business_intelligence.sentiment_analysis.online_reputation_score * 100}
-                            label="Reputation Score"
+                            label="⭐ Reputation Score"
                             color="indigo"
                           />
                         )}
@@ -450,36 +750,51 @@ function App() {
                       {/* Investment Recommendation */}
                       {analysis.business_intelligence.investment_recommendation && (
                         <div className="bg-gradient-to-r from-orange-50 to-red-50 rounded-lg p-6 border border-orange-200">
-                          <h4 className="font-bold text-orange-800 mb-4">💰 Investment Recommendation</h4>
+                          <h4 className="font-bold text-orange-800 mb-4 text-xl">💰 Investment Recommendation</h4>
                           <div className="grid md:grid-cols-2 gap-6">
                             <div>
-                              <p className="mb-2">
-                                <strong>Recommended Level:</strong> 
-                                <span className={`ml-2 px-3 py-1 rounded-full text-sm font-medium ${
-                                  analysis.business_intelligence.investment_recommendation.recommended_investment_level === 'high' 
-                                    ? 'bg-green-100 text-green-800'
-                                    : analysis.business_intelligence.investment_recommendation.recommended_investment_level === 'medium'
-                                    ? 'bg-yellow-100 text-yellow-800'
-                                    : 'bg-red-100 text-red-800'
-                                }`}>
-                                  {analysis.business_intelligence.investment_recommendation.recommended_investment_level}
-                                </span>
-                              </p>
-                              <p className="mb-2">
-                                <strong>Success Probability:</strong> {Math.round((analysis.business_intelligence.investment_recommendation.success_probability || 0) * 100)}%
-                              </p>
-                              <p>
-                                <strong>Expected ROI Timeline:</strong> {analysis.business_intelligence.investment_recommendation.expected_roi_timeline}
-                              </p>
+                              <div className="space-y-3">
+                                <p className="flex items-center">
+                                  <strong className="mr-3">Investment Level:</strong> 
+                                  <span className={`px-4 py-2 rounded-full text-sm font-bold ${
+                                    analysis.business_intelligence.investment_recommendation.recommended_investment_level === 'high' 
+                                      ? 'bg-green-200 text-green-800'
+                                      : analysis.business_intelligence.investment_recommendation.recommended_investment_level === 'medium'
+                                      ? 'bg-yellow-200 text-yellow-800'
+                                      : 'bg-red-200 text-red-800'
+                                  }`}>
+                                    {analysis.business_intelligence.investment_recommendation.recommended_investment_level?.toUpperCase()}
+                                  </span>
+                                </p>
+                                <p>
+                                  <strong>Success Probability:</strong> 
+                                  <span className="ml-2 text-lg font-bold text-green-600">
+                                    {Math.round((analysis.business_intelligence.investment_recommendation.success_probability || 0) * 100)}%
+                                  </span>
+                                </p>
+                                <p>
+                                  <strong>Expected ROI Timeline:</strong> 
+                                  <span className="ml-2 font-medium">{analysis.business_intelligence.investment_recommendation.expected_roi_timeline}</span>
+                                </p>
+                              </div>
                             </div>
                             <div>
                               {analysis.business_intelligence.investment_recommendation.budget_recommendation && (
-                                <div>
-                                  <strong>Budget Recommendations:</strong>
-                                  <ul className="list-disc list-inside mt-2 text-sm space-y-1">
-                                    <li>Monthly Minimum: ${analysis.business_intelligence.investment_recommendation.budget_recommendation.monthly_minimum?.toLocaleString()}</li>
-                                    <li>Monthly Optimal: ${analysis.business_intelligence.investment_recommendation.budget_recommendation.monthly_optimal?.toLocaleString()}</li>
-                                    <li>Setup Costs: ${analysis.business_intelligence.investment_recommendation.budget_recommendation.setup_costs?.toLocaleString()}</li>
+                                <div className="bg-white rounded-lg p-4">
+                                  <strong className="block mb-2">💵 Budget Recommendations:</strong>
+                                  <ul className="space-y-2 text-sm">
+                                    <li className="flex justify-between">
+                                      <span>Monthly Minimum:</span>
+                                      <strong>${analysis.business_intelligence.investment_recommendation.budget_recommendation.monthly_minimum?.toLocaleString()}</strong>
+                                    </li>
+                                    <li className="flex justify-between">
+                                      <span>Monthly Optimal:</span>
+                                      <strong className="text-green-600">${analysis.business_intelligence.investment_recommendation.budget_recommendation.monthly_optimal?.toLocaleString()}</strong>
+                                    </li>
+                                    <li className="flex justify-between">
+                                      <span>Setup Costs:</span>
+                                      <strong>${analysis.business_intelligence.investment_recommendation.budget_recommendation.setup_costs?.toLocaleString()}</strong>
+                                    </li>
                                   </ul>
                                 </div>
                               )}
@@ -488,10 +803,10 @@ function App() {
 
                           {analysis.business_intelligence.investment_recommendation.priority_areas && (
                             <div className="mt-4">
-                              <strong>Priority Areas:</strong>
-                              <div className="flex flex-wrap gap-2 mt-2">
+                              <strong className="block mb-2">🎯 Priority Investment Areas:</strong>
+                              <div className="flex flex-wrap gap-2">
                                 {analysis.business_intelligence.investment_recommendation.priority_areas.map((area, idx) => (
-                                  <span key={idx} className="bg-orange-100 text-orange-800 px-3 py-1 rounded-full text-sm font-medium">
+                                  <span key={idx} className="bg-orange-200 text-orange-800 px-3 py-2 rounded-full text-sm font-medium">
                                     {area}
                                   </span>
                                 ))}
@@ -505,12 +820,12 @@ function App() {
                       <div className="grid md:grid-cols-2 gap-6">
                         {analysis.business_intelligence.business_intent_analysis?.growth_signals && (
                           <div className="bg-green-50 rounded-lg p-4 border border-green-200">
-                            <h5 className="font-semibold text-green-800 mb-3">📈 Growth Signals</h5>
+                            <h5 className="font-semibold text-green-800 mb-3 text-lg">📈 Growth Signals</h5>
                             <ul className="space-y-2">
                               {analysis.business_intelligence.business_intent_analysis.growth_signals.map((signal, idx) => (
                                 <li key={idx} className="flex items-start">
-                                  <span className="text-green-500 mr-2">✓</span>
-                                  <span className="text-green-700 text-sm">{signal}</span>
+                                  <span className="text-green-500 mr-3 text-lg">✅</span>
+                                  <span className="text-green-700">{signal}</span>
                                 </li>
                               ))}
                             </ul>
@@ -519,12 +834,12 @@ function App() {
 
                         {analysis.business_intelligence.business_intent_analysis?.risk_factors && (
                           <div className="bg-red-50 rounded-lg p-4 border border-red-200">
-                            <h5 className="font-semibold text-red-800 mb-3">⚠️ Risk Factors</h5>
+                            <h5 className="font-semibold text-red-800 mb-3 text-lg">⚠️ Risk Factors</h5>
                             <ul className="space-y-2">
                               {analysis.business_intelligence.business_intent_analysis.risk_factors.map((risk, idx) => (
                                 <li key={idx} className="flex items-start">
-                                  <span className="text-red-500 mr-2">⚠</span>
-                                  <span className="text-red-700 text-sm">{risk}</span>
+                                  <span className="text-red-500 mr-3 text-lg">⚠️</span>
+                                  <span className="text-red-700">{risk}</span>
                                 </li>
                               ))}
                             </ul>
@@ -535,66 +850,92 @@ function App() {
                   </InfoCard>
                 )}
 
-                {/* Outreach Message */}
-                {analysis.outreach_message && !analysis.outreach_message.error && (
-                  <InfoCard title="Personalized Outreach Message" icon="✉️" color="teal">
+                {/* Outreach Message - Only show if requested */}
+                {generateOutreach && analysis.outreach_message && !analysis.outreach_message.error && (
+                  <InfoCard title="✉️ Personalized Outreach Message" icon="📧" color="teal">
                     <div className="space-y-6">
-                      {/* Subject Line */}
-                      <div className="bg-teal-50 rounded-lg p-4 border border-teal-200">
-                        <h4 className="font-semibold text-teal-800 mb-2">📧 Subject Line</h4>
-                        <p className="text-teal-700 font-medium">{analysis.outreach_message.subject_line}</p>
+                      
+                      {/* Subject Line - Highlighted */}
+                      <div className="bg-gradient-to-r from-teal-100 to-blue-100 rounded-lg p-6 border-2 border-teal-200">
+                        <h4 className="font-bold text-teal-800 mb-3 text-lg">📧 Email Subject Line</h4>
+                        <p className="text-teal-700 font-semibold text-lg bg-white rounded px-4 py-2 border">
+                          {analysis.outreach_message.subject_line}
+                        </p>
                       </div>
 
-                      {/* Email Body */}
-                      <div className="bg-white border rounded-lg p-6">
-                        <h4 className="font-semibold text-gray-800 mb-4">Email Content</h4>
-                        
-                        {/* Opening Line */}
-                        <div className="mb-4">
-                          <h5 className="font-medium text-gray-700 mb-2">Opening Line:</h5>
-                          <p className="text-gray-600 italic">{analysis.outreach_message.opening_line}</p>
-                        </div>
+                      {/* One Line Intro - Highlighted */}
+                      <div className="bg-gradient-to-r from-blue-100 to-purple-100 rounded-lg p-6 border-2 border-blue-200">
+                        <h4 className="font-bold text-blue-800 mb-3 text-lg">👋 Opening Line</h4>
+                        <p className="text-blue-700 font-medium text-lg bg-white rounded px-4 py-2 border italic">
+                          "{analysis.outreach_message.opening_line}"
+                        </p>
+                      </div>
 
-                        {/* Body Paragraphs */}
-                        <div className="mb-4">
-                          <h5 className="font-medium text-gray-700 mb-2">Email Body:</h5>
-                          <div className="space-y-3">
+                      {/* Full Email Body */}
+                      <div className="bg-white border-2 border-gray-200 rounded-lg p-6">
+                        <h4 className="font-semibold text-gray-800 mb-4 text-lg">📝 Complete Email Content</h4>
+                        
+                        <div className="bg-gray-50 rounded-lg p-6 font-mono text-sm leading-relaxed">
+                          <div className="border-b pb-3 mb-4">
+                            <p><strong>Subject:</strong> {analysis.outreach_message.subject_line}</p>
+                          </div>
+                          
+                          <div className="space-y-4">
+                            <p className="font-semibold italic text-blue-600">"{analysis.outreach_message.opening_line}"</p>
+                            
                             {analysis.outreach_message.body_paragraphs?.map((paragraph, idx) => (
-                              <p key={idx} className="text-gray-600 leading-relaxed">
+                              <p key={idx} className="text-gray-700 leading-relaxed">
                                 {paragraph}
                               </p>
                             ))}
+                            
+                            <p className="font-medium text-purple-600 mt-6">
+                              {analysis.outreach_message.call_to_action}
+                            </p>
+                            
+                            {analysis.outreach_message.ps_line && (
+                              <p className="italic text-gray-600 border-t pt-4 mt-4">
+                                <strong>P.S.</strong> {analysis.outreach_message.ps_line}
+                              </p>
+                            )}
                           </div>
                         </div>
-
-                        {/* Call to Action */}
-                        <div className="mb-4">
-                          <h5 className="font-medium text-gray-700 mb-2">Call to Action:</h5>
-                          <p className="text-gray-600 font-medium">{analysis.outreach_message.call_to_action}</p>
-                        </div>
-
-                        {/* PS Line */}
-                        {analysis.outreach_message.ps_line && (
-                          <div className="border-t pt-4">
-                            <h5 className="font-medium text-gray-700 mb-2">P.S.:</h5>
-                            <p className="text-gray-600 italic">{analysis.outreach_message.ps_line}</p>
-                          </div>
-                        )}
                       </div>
 
-                      {/* Personalization Elements */}
+                      {/* Personalization Details */}
                       {analysis.outreach_message.personalization_elements && (
                         <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
                           <h5 className="font-semibold text-blue-800 mb-3">🎯 Personalization Elements Used</h5>
                           <div className="flex flex-wrap gap-2">
                             {analysis.outreach_message.personalization_elements.map((element, idx) => (
-                              <span key={idx} className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm">
+                              <span key={idx} className="bg-blue-200 text-blue-800 px-3 py-1 rounded-full text-sm font-medium">
                                 {element}
                               </span>
                             ))}
                           </div>
                         </div>
                       )}
+
+                      {/* Email Tone & Key Insights */}
+                      <div className="grid md:grid-cols-2 gap-4">
+                        <div className="bg-green-50 rounded-lg p-4 border border-green-200">
+                          <h5 className="font-semibold text-green-800 mb-2">🎭 Email Tone</h5>
+                          <p className="text-green-700 capitalize font-medium">
+                            {analysis.outreach_message.tone || 'Professional'}
+                          </p>
+                        </div>
+                        
+                        {analysis.outreach_message.key_insights_mentioned && (
+                          <div className="bg-purple-50 rounded-lg p-4 border border-purple-200">
+                            <h5 className="font-semibold text-purple-800 mb-2">💡 Key Insights Mentioned</h5>
+                            <ul className="text-sm text-purple-700 space-y-1">
+                              {analysis.outreach_message.key_insights_mentioned.map((insight, idx) => (
+                                <li key={idx}>• {insight}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </InfoCard>
                 )}
@@ -617,10 +958,14 @@ function App() {
                           {hist.business_input?.business_name || 'Unknown Business'}
                         </h4>
                         <p className="text-sm text-gray-600">
-                          {hist.business_input?.business_category} • {hist.business_input?.location}
+                          {hist.business_input?.business_category}
+                          {hist.business_input?.business_subcategory && ` > ${hist.business_input.business_subcategory}`}
+                          {hist.business_input?.location && ` • ${hist.business_input.location}`}
                         </p>
                         <p className="text-xs text-gray-500 mt-1">
-                          Analyzed: {new Date(hist.created_at).toLocaleDateString()}
+                          Analyzed: {new Date(hist.created_at).toLocaleDateString()} • 
+                          Count: {hist.business_input?.business_count || 1}
+                          {hist.business_input?.analysis_options?.generate_outreach && ' • Email Generated'}
                         </p>
                       </div>
                       <button className="text-blue-500 hover:text-blue-700 text-sm font-medium">

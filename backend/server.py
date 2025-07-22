@@ -42,16 +42,18 @@ GOOGLE_CUSTOM_SEARCH_API_KEY = os.getenv("GOOGLE_CUSTOM_SEARCH_API_KEY")
 GOOGLE_SEARCH_ENGINE_ID = os.getenv("GOOGLE_SEARCH_ENGINE_ID")
 
 # Pydantic models
+class AnalysisOptions(BaseModel):
+    tech_stack_method: str = "both"  # 'api', 'custom', 'both'
+    website_analysis_method: str = "both"  # 'google_apis', 'custom', 'both'
+    generate_outreach: bool = False
+
 class BusinessInput(BaseModel):
     business_name: str
+    business_count: int = 1
     business_category: Optional[str] = None
+    business_subcategory: Optional[str] = None
     location: Optional[str] = None
-
-class AnalysisRequest(BaseModel):
-    business_data: Dict[str, Any]
-    analysis_type: str  # "complete", "basic", "custom"
-    use_google_apis: bool = True
-    use_custom_analysis: bool = True
+    analysis_options: Optional[AnalysisOptions] = AnalysisOptions()
 
 class BusinessAnalysis(BaseModel):
     analysis_id: str
@@ -74,6 +76,49 @@ async def startup_event():
         print("Successfully connected to MongoDB")
     except Exception as e:
         print(f"Failed to connect to MongoDB: {e}")
+
+async def extract_multiple_businesses(business_name: str, business_count: int, location: str = "", category: str = "") -> Dict[str, Any]:
+    """Extract information for multiple businesses"""
+    
+    businesses = []
+    search_queries = []
+    
+    # Generate different search queries for finding multiple businesses
+    base_query = f"{business_name}"
+    if category:
+        base_query += f" {category}"
+    if location:
+        base_query += f" {location}"
+        
+    # Create variations for finding similar businesses
+    search_queries = [
+        f"{base_query}",
+        f"{category} near {location}" if category and location else f"{business_name}",
+        f"{business_name} competitors" if business_name else base_query,
+        f"best {category} {location}" if category and location else base_query,
+        f"{category} services {location}" if category and location else base_query
+    ]
+    
+    # Limit to requested number of queries
+    search_queries = search_queries[:min(business_count, 5)]
+    
+    for query in search_queries:
+        try:
+            business_info = await extract_google_business_profile(query, location)
+            if business_info and business_info.get('processed_data'):
+                businesses.append(business_info)
+                if len(businesses) >= business_count:
+                    break
+        except Exception as e:
+            print(f"Error extracting business for query '{query}': {e}")
+            continue
+    
+    return {
+        'total_found': len(businesses),
+        'requested_count': business_count,
+        'businesses': businesses,
+        'search_queries_used': search_queries[:len(businesses)]
+    }
 
 async def extract_google_business_profile(business_name: str, location: str = "") -> Dict[str, Any]:
     """Extract business information using Google Custom Search API and web scraping"""
@@ -153,29 +198,41 @@ async def process_business_data(api_results: Dict, scraped_results: Dict, busine
         chat = LlmChat(
             api_key=GEMINI_API_KEY,
             session_id=f"business_extraction_{uuid.uuid4()}",
-            system_message="You are an expert business data extraction analyst. Extract structured business information from search results."
+            system_message="You are an expert business data extraction analyst. Extract structured business information from search results and web data."
         ).with_model("gemini", "gemini-2.5-pro-preview-05-06")
         
         prompt = f"""
-        Extract business information from the following search results and data:
+        Extract comprehensive business information from the following search results and data:
         
         Business Name: {business_name}
-        Data: {json.dumps(all_data, default=str)}
+        Search Data: {json.dumps(all_data, default=str)}
         
-        Please extract and return a JSON object with:
+        Please extract and return ONLY a JSON object with this exact structure:
         {{
-            "business_name": "extracted business name",
-            "email": "extracted email address",
-            "phone": "extracted phone number",
-            "website": "extracted website URL",
-            "address": "extracted physical address",
-            "social_media": {{"linkedin": "url", "facebook": "url", "instagram": "url"}},
-            "description": "business description",
-            "services": ["list of services"],
+            "business_name": "extracted business name or provided name",
+            "email": "extracted email address or null",
+            "phone": "extracted phone number or null", 
+            "website": "extracted website URL or null",
+            "address": "extracted physical address or null",
+            "social_media": {{
+                "linkedin": "linkedin url or null",
+                "facebook": "facebook url or null", 
+                "instagram": "instagram url or null",
+                "twitter": "twitter url or null"
+            }},
+            "description": "business description or services offered",
+            "services": ["list", "of", "services", "offered"],
+            "business_hours": "operating hours if found",
+            "years_in_business": "how long in business if mentioned",
             "confidence_score": 0.85
         }}
         
-        If information is not found, use null values. Include confidence score based on data quality.
+        IMPORTANT: 
+        - If information is not found, use null values (not "Not found" or empty strings)
+        - Extract contact information carefully from snippets and search results
+        - Look for patterns like email addresses, phone numbers, website URLs
+        - Include confidence score based on data quality (0.0 to 1.0)
+        - Return ONLY the JSON object, no additional text
         """
         
         user_message = UserMessage(text=prompt)
@@ -183,18 +240,64 @@ async def process_business_data(api_results: Dict, scraped_results: Dict, busine
         
         # Try to parse JSON from response
         try:
-            import json
-            # Extract JSON from response if it's wrapped in text
-            json_match = re.search(r'\{.*\}', response, re.DOTALL)
+            # Clean the response and extract JSON
+            clean_response = response.strip()
+            if clean_response.startswith('```'):
+                clean_response = re.sub(r'^```(?:json)?\s*', '', clean_response)
+                clean_response = re.sub(r'\s*```$', '', clean_response)
+            
+            # Find JSON object in response
+            json_match = re.search(r'\{.*\}', clean_response, re.DOTALL)
             if json_match:
-                return json.loads(json_match.group())
+                parsed_data = json.loads(json_match.group())
+                
+                # Ensure required fields exist
+                required_fields = ['business_name', 'email', 'phone', 'website', 'address']
+                for field in required_fields:
+                    if field not in parsed_data:
+                        parsed_data[field] = None
+                
+                return parsed_data
             else:
-                return {"error": "Could not parse AI response", "raw_response": response}
-        except:
-            return {"error": "Invalid JSON response", "raw_response": response}
+                return {
+                    "business_name": business_name,
+                    "email": None,
+                    "phone": None,
+                    "website": None,
+                    "address": None,
+                    "social_media": {},
+                    "description": "Business data extraction in progress",
+                    "services": [],
+                    "confidence_score": 0.3,
+                    "error": "Could not parse AI response"
+                }
+        except json.JSONDecodeError as e:
+            return {
+                "business_name": business_name,
+                "email": None,
+                "phone": None,
+                "website": None,
+                "address": None,
+                "social_media": {},
+                "description": "Business data extraction failed",
+                "services": [],
+                "confidence_score": 0.1,
+                "error": f"JSON parsing error: {str(e)}"
+            }
             
     except Exception as e:
-        return {"error": f"AI processing failed: {str(e)}"}
+        return {
+            "business_name": business_name,
+            "email": None,
+            "phone": None,
+            "website": None,
+            "address": None,
+            "social_media": {},
+            "description": "AI processing failed",
+            "services": [],
+            "confidence_score": 0.0,
+            "error": f"AI processing failed: {str(e)}"
+        }
 
 async def discover_linkedin_profile(business_name: str, website: str = "") -> Dict[str, Any]:
     """Discover LinkedIn profile using boolean search"""
@@ -245,7 +348,7 @@ async def discover_linkedin_profile(business_name: str, website: str = "") -> Di
         'total_found': len(results)
     }
 
-async def analyze_technology_stack(website_url: str, use_custom: bool = True) -> Dict[str, Any]:
+async def analyze_technology_stack(website_url: str, method: str = "both") -> Dict[str, Any]:
     """Analyze website technology stack"""
     
     if not website_url:
@@ -259,10 +362,11 @@ async def analyze_technology_stack(website_url: str, use_custom: bool = True) ->
         'automation': [],
         'hosting': [],
         'security': [],
-        'confidence_score': 0.0
+        'confidence_score': 0.0,
+        'analysis_method': method
     }
     
-    if use_custom:
+    if method in ['custom', 'both']:
         # Custom technology detection
         try:
             headers = {
@@ -289,7 +393,11 @@ async def analyze_technology_stack(website_url: str, use_custom: bool = True) ->
                             'google_ads': ['googleadservices.com', 'google-ads'],
                             'mailchimp': ['mailchimp.com', 'mc.us'],
                             'hubspot': ['hubspot.com', 'hs-analytics'],
-                            'cloudflare': ['cloudflare.com', '__cfduid']
+                            'cloudflare': ['cloudflare.com', '__cfduid'],
+                            'stripe': ['stripe.com', 'js.stripe.com'],
+                            'paypal': ['paypal.com', 'paypalobjects.com'],
+                            'hotjar': ['hotjar.com', 'static.hotjar.com'],
+                            'intercom': ['intercom.io', 'widget.intercom.io']
                         }
                         
                         html_lower = html.lower()
@@ -309,14 +417,20 @@ async def analyze_technology_stack(website_url: str, use_custom: bool = True) ->
                         server_header = headers_dict.get('server', '').lower()
                         if server_header:
                             if 'nginx' in server_header:
-                                tech_analysis['hosting'].append({'name': 'nginx', 'confidence': 0.9})
+                                tech_analysis['hosting'].append({'name': 'nginx', 'confidence': 0.9, 'detection_method': 'headers'})
                             elif 'apache' in server_header:
-                                tech_analysis['hosting'].append({'name': 'apache', 'confidence': 0.9})
+                                tech_analysis['hosting'].append({'name': 'apache', 'confidence': 0.9, 'detection_method': 'headers'})
                         
                         tech_analysis['confidence_score'] = calculate_tech_confidence(tech_analysis)
                         
         except Exception as e:
             tech_analysis['error'] = f"Custom analysis failed: {str(e)}"
+    
+    # TODO: Add API-based detection when method is 'api' or 'both'
+    if method in ['api', 'both']:
+        # Placeholder for API-based tech detection
+        # This could integrate with BuiltWith, Wappalyzer, or similar services
+        pass
     
     return tech_analysis
 
@@ -324,10 +438,10 @@ def categorize_technology(tech: str) -> str:
     """Categorize technology into appropriate groups"""
     tech_categories = {
         'cms': ['wordpress', 'drupal', 'joomla', 'shopify', 'wix', 'squarespace'],
-        'analytics': ['google_analytics', 'adobe_analytics', 'mixpanel'],
+        'analytics': ['google_analytics', 'adobe_analytics', 'mixpanel', 'hotjar'],
         'advertising': ['google_ads', 'facebook_pixel', 'bing_ads'],
         'seo_tools': ['yoast', 'rankmath', 'semrush'],
-        'automation': ['mailchimp', 'hubspot', 'marketo'],
+        'automation': ['mailchimp', 'hubspot', 'marketo', 'intercom'],
         'hosting': ['nginx', 'apache', 'cloudflare'],
         'security': ['ssl', 'cloudflare']
     }
@@ -353,62 +467,64 @@ def calculate_tech_confidence(tech_analysis: Dict) -> float:
     
     return min(confidence_sum / total_detections, 1.0)
 
-async def analyze_website_performance(website_url: str, use_google_apis: bool = True) -> Dict[str, Any]:
+async def analyze_website_performance(website_url: str, method: str = "both") -> Dict[str, Any]:
     """Analyze website performance and SEO"""
     
     analysis_results = {
         'seo_score': 0.0,
         'performance_score': 0.0,
-        'design_quality': 0.0,
+        'design_quality_score': 0.0,
         'conversion_tracking': {},
         'email_marketing': {},
         'advertising_detected': {},
-        'recommendations': []
+        'recommendations': [],
+        'analysis_method': method
     }
     
     if not website_url:
         return {"error": "No website URL provided"}
     
-    # Custom website analysis
-    try:
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        }
-        
-        async with aiohttp.ClientSession() as session:
-            async with session.get(website_url, headers=headers, timeout=15) as response:
-                if response.status == 200:
-                    html = await response.text()
-                    soup = BeautifulSoup(html, 'html.parser')
-                    
-                    # SEO Analysis
-                    seo_factors = analyze_seo_factors(soup, html)
-                    analysis_results.update(seo_factors)
-                    
-                    # Design Quality Analysis
-                    design_analysis = analyze_design_quality(soup, html)
-                    analysis_results['design_quality'] = design_analysis
-                    
-                    # Conversion Tracking Detection
-                    conversion_tracking = detect_conversion_tracking(html)
-                    analysis_results['conversion_tracking'] = conversion_tracking
-                    
-                    # Email Marketing Detection
-                    email_marketing = detect_email_marketing(html)
-                    analysis_results['email_marketing'] = email_marketing
-                    
-                    # Advertising Detection
-                    advertising = detect_advertising(html)
-                    analysis_results['advertising_detected'] = advertising
-                    
-    except Exception as e:
-        analysis_results['error'] = f"Analysis failed: {str(e)}"
-    
-    # Google PageSpeed Insights (if using Google APIs)
-    if use_google_apis:
+    if method in ['custom', 'both']:
+        # Custom website analysis
         try:
-            # This would require the PageSpeed Insights API
-            # For now, we'll use custom analysis
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
+            
+            async with aiohttp.ClientSession() as session:
+                async with session.get(website_url, headers=headers, timeout=15) as response:
+                    if response.status == 200:
+                        html = await response.text()
+                        soup = BeautifulSoup(html, 'html.parser')
+                        
+                        # SEO Analysis
+                        seo_factors = analyze_seo_factors(soup, html)
+                        analysis_results.update(seo_factors)
+                        
+                        # Design Quality Analysis
+                        design_analysis = analyze_design_quality(soup, html)
+                        analysis_results['design_quality_score'] = design_analysis.get('design_quality_score', 0)
+                        
+                        # Conversion Tracking Detection
+                        conversion_tracking = detect_conversion_tracking(html)
+                        analysis_results['conversion_tracking'] = conversion_tracking
+                        
+                        # Email Marketing Detection
+                        email_marketing = detect_email_marketing(html)
+                        analysis_results['email_marketing'] = email_marketing
+                        
+                        # Advertising Detection
+                        advertising = detect_advertising(html)
+                        analysis_results['advertising_detected'] = advertising
+                        
+        except Exception as e:
+            analysis_results['error'] = f"Analysis failed: {str(e)}"
+    
+    # Google APIs analysis
+    if method in ['google_apis', 'both']:
+        try:
+            # TODO: Implement Google PageSpeed Insights API integration
+            # TODO: Implement Google Search Console API integration
             pass
         except Exception as e:
             analysis_results['google_api_error'] = str(e)
@@ -432,10 +548,11 @@ def analyze_seo_factors(soup: BeautifulSoup, html: str) -> Dict[str, Any]:
     # Title tag
     title_tag = soup.find('title')
     if title_tag:
+        title_content = title_tag.get_text().strip()
         seo_analysis['title_tag'] = {
-            'content': title_tag.get_text().strip(),
-            'length': len(title_tag.get_text().strip()),
-            'optimal': 30 <= len(title_tag.get_text().strip()) <= 60
+            'content': title_content,
+            'length': len(title_content),
+            'optimal': 30 <= len(title_content) <= 60
         }
     
     # Meta description
@@ -453,7 +570,7 @@ def analyze_seo_factors(soup: BeautifulSoup, html: str) -> Dict[str, Any]:
     seo_analysis['h1_tags'] = [h1.get_text().strip() for h1 in h1_tags]
     
     h2_tags = soup.find_all('h2')
-    seo_analysis['h2_tags'] = [h2.get_text().strip() for h2 in h2_tags[:5]]  # First 5 H2s
+    seo_analysis['h2_tags'] = [h2.get_text().strip() for h2 in h2_tags[:5]]
     
     # Images without alt text
     images = soup.find_all('img')
@@ -668,7 +785,7 @@ async def analyze_business_intent_and_signals(business_data: Dict[str, Any], web
         6. Conversion tracking and analytics setup
         7. Content quality and marketing automation readiness
         
-        Provide realistic scores and actionable insights.
+        Provide realistic scores and actionable insights. Return ONLY the JSON object.
         """
         
         user_message = UserMessage(text=analysis_prompt)
@@ -676,13 +793,19 @@ async def analyze_business_intent_and_signals(business_data: Dict[str, Any], web
         
         # Parse JSON response
         try:
-            json_match = re.search(r'\{.*\}', response, re.DOTALL)
+            # Clean the response
+            clean_response = response.strip()
+            if clean_response.startswith('```'):
+                clean_response = re.sub(r'^```(?:json)?\s*', '', clean_response)
+                clean_response = re.sub(r'\s*```$', '', clean_response)
+            
+            json_match = re.search(r'\{.*\}', clean_response, re.DOTALL)
             if json_match:
                 return json.loads(json_match.group())
             else:
                 return {"error": "Could not parse AI analysis response", "raw_response": response}
-        except:
-            return {"error": "Invalid JSON in AI response", "raw_response": response}
+        except json.JSONDecodeError as e:
+            return {"error": f"Invalid JSON in AI response: {str(e)}", "raw_response": response}
             
     except Exception as e:
         return {"error": f"Business analysis failed: {str(e)}"}
@@ -733,6 +856,8 @@ async def generate_personalized_outreach(business_analysis: Dict[str, Any], busi
         6. Create urgency without being pushy
         7. Make the subject line compelling and curiosity-driven
         8. Ensure the tone matches the business type and sophistication level
+        
+        Return ONLY the JSON object.
         """
         
         user_message = UserMessage(text=outreach_prompt)
@@ -740,13 +865,19 @@ async def generate_personalized_outreach(business_analysis: Dict[str, Any], busi
         
         # Parse JSON response
         try:
-            json_match = re.search(r'\{.*\}', response, re.DOTALL)
+            # Clean the response
+            clean_response = response.strip()
+            if clean_response.startswith('```'):
+                clean_response = re.sub(r'^```(?:json)?\s*', '', clean_response)
+                clean_response = re.sub(r'\s*```$', '', clean_response)
+            
+            json_match = re.search(r'\{.*\}', clean_response, re.DOTALL)
             if json_match:
                 return json.loads(json_match.group())
             else:
                 return {"error": "Could not parse outreach generation response", "raw_response": response}
-        except:
-            return {"error": "Invalid JSON in outreach response", "raw_response": response}
+        except json.JSONDecodeError as e:
+            return {"error": f"Invalid JSON in outreach response: {str(e)}", "raw_response": response}
             
     except Exception as e:
         return {"error": f"Outreach generation failed: {str(e)}"}
@@ -759,73 +890,107 @@ async def analyze_business(business_input: BusinessInput):
         # Generate unique analysis ID
         analysis_id = str(uuid.uuid4())
         
+        # Get analysis options
+        options = business_input.analysis_options or AnalysisOptions()
+        
+        print(f"Starting analysis for: {business_input.business_name}")
+        print(f"Business count: {business_input.business_count}")
+        print(f"Analysis options: {options}")
+        
         # Step 1: Extract business information
-        print(f"Extracting business data for: {business_input.business_name}")
-        business_data = await extract_google_business_profile(
-            business_input.business_name, 
-            business_input.location or ""
-        )
+        print(f"Extracting business data...")
+        if business_input.business_count > 1:
+            business_data = await extract_multiple_businesses(
+                business_input.business_name,
+                business_input.business_count,
+                business_input.location or "",
+                business_input.business_category or ""
+            )
+        else:
+            single_business = await extract_google_business_profile(
+                business_input.business_name, 
+                business_input.location or ""
+            )
+            business_data = {
+                'total_found': 1,
+                'requested_count': 1,
+                'businesses': [single_business] if single_business else [],
+                'main_business': single_business
+            }
+        
+        # Get primary business for analysis
+        primary_business = None
+        if business_data.get('businesses') and len(business_data['businesses']) > 0:
+            primary_business = business_data['businesses'][0]
+        elif business_data.get('main_business'):
+            primary_business = business_data['main_business']
         
         # Step 2: Discover LinkedIn profile
         print("Discovering LinkedIn profile...")
-        linkedin_data = await discover_linkedin_profile(
-            business_input.business_name,
-            business_data.get('processed_data', {}).get('website', '')
-        )
+        linkedin_data = {}
+        if primary_business and primary_business.get('processed_data'):
+            linkedin_data = await discover_linkedin_profile(
+                business_input.business_name,
+                primary_business['processed_data'].get('website', '')
+            )
         
         # Step 3: Analyze technology stack
-        website_url = business_data.get('processed_data', {}).get('website')
+        print("Analyzing technology stack...")
         tech_analysis = {}
-        if website_url:
-            print("Analyzing technology stack...")
-            tech_analysis = await analyze_technology_stack(website_url, use_custom=True)
+        if primary_business and primary_business.get('processed_data', {}).get('website'):
+            tech_analysis = await analyze_technology_stack(
+                primary_business['processed_data']['website'], 
+                options.tech_stack_method
+            )
         
         # Step 4: Website performance analysis
+        print("Analyzing website performance...")
         website_analysis = {}
-        if website_url:
-            print("Analyzing website performance...")
-            website_analysis = await analyze_website_performance(website_url, use_google_apis=True)
+        if primary_business and primary_business.get('processed_data', {}).get('website'):
+            website_analysis = await analyze_website_performance(
+                primary_business['processed_data']['website'], 
+                options.website_analysis_method
+            )
         
         # Step 5: Business intent and signals analysis
         print("Analyzing business intent and signals...")
-        combined_data = {
-            'business_data': business_data,
-            'linkedin_data': linkedin_data,
-            'tech_analysis': tech_analysis,
-            'website_analysis': website_analysis
-        }
-        
+        primary_business_data = primary_business.get('processed_data', {}) if primary_business else {}
         intent_analysis = await analyze_business_intent_and_signals(
-            business_data.get('processed_data', {}),
+            primary_business_data,
             website_analysis
         )
         
-        # Step 6: Generate personalized outreach
-        print("Generating personalized outreach...")
-        outreach_message = await generate_personalized_outreach(
-            intent_analysis,
-            business_input.business_name
-        )
+        # Step 6: Generate personalized outreach (only if requested)
+        print(f"Generate outreach: {options.generate_outreach}")
+        outreach_message = {}
+        if options.generate_outreach:
+            print("Generating personalized outreach...")
+            outreach_message = await generate_personalized_outreach(
+                intent_analysis,
+                business_input.business_name
+            )
         
         # Compile comprehensive analysis
         comprehensive_analysis = {
             'analysis_id': analysis_id,
             'business_input': business_input.dict(),
-            'business_info': business_data,
+            'business_info': primary_business if primary_business else {},
+            'all_businesses': business_data,
             'linkedin_profile': linkedin_data,
             'tech_stack': tech_analysis,
             'website_analysis': website_analysis,
             'business_intelligence': intent_analysis,
-            'outreach_message': outreach_message,
+            'outreach_message': outreach_message if options.generate_outreach else {'note': 'Outreach generation was not requested'},
+            'analysis_options': options.dict(),
             'created_at': datetime.utcnow(),
             'processing_time': 'completed'
         }
         
         # Save to database
         result = await db.business_analyses.insert_one(comprehensive_analysis)
-        
-        # Convert ObjectId to string for JSON serialization
         comprehensive_analysis['_id'] = str(result.inserted_id)
+        
+        print(f"Analysis completed successfully. ID: {analysis_id}")
         
         return {
             'success': True,
@@ -834,6 +999,7 @@ async def analyze_business(business_input: BusinessInput):
         }
         
     except Exception as e:
+        print(f"Analysis failed: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
 
 @app.get("/api/analysis/{analysis_id}")
