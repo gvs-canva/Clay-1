@@ -1,0 +1,82 @@
+{
+  "test_summary": {
+    "passed": 3,
+    "total": 6,
+    "success_rate": 50.0,
+    "timestamp": "2025-07-22T12:56:16.168841"
+  },
+  "detailed_results": [
+    {
+      "test_name": "Health Check",
+      "success": true,
+      "details": "All systems operational",
+      "timestamp": "2025-07-22T12:54:05.889703",
+      "response_data": {
+        "status": "healthy",
+        "database_connected": true,
+        "gemini_configured": true,
+        "google_search_configured": true,
+        "timestamp": "2025-07-22T12:54:05.886422"
+      }
+    },
+    {
+      "test_name": "Main Analysis",
+      "success": false,
+      "details": "HTTP 500: Internal Server Error",
+      "timestamp": "2025-07-22T12:55:12.114641",
+      "response_data": null
+    },
+    {
+      "test_name": "Get Analysis",
+      "success": false,
+      "details": "No analysis ID available from previous test",
+      "timestamp": "2025-07-22T12:55:12.114766",
+      "response_data": null
+    },
+    {
+      "test_name": "Get All Analyses",
+      "success": true,
+      "details": "Retrieved 4 analyses successfully",
+      "timestamp": "2025-07-22T12:55:12.129170",
+      "response_data": {
+        "total_analyses": 4,
+        "test_analysis_found": false
+      }
+    },
+    {
+      "test_name": "Error Handling - Empty Business Name",
+      "success": true,
+      "details": "Correctly returned HTTP 500",
+      "timestamp": "2025-07-22T12:56:16.137570",
+      "response_data": null
+    },
+    {
+      "test_name": "Error Handling - Missing Business Name",
+      "success": true,
+      "details": "Correctly returned HTTP 422",
+      "timestamp": "2025-07-22T12:56:16.147625",
+      "response_data": null
+    },
+    {
+      "test_name": "Error Handling - Invalid JSON",
+      "success": true,
+      "details": "Correctly returned HTTP 422",
+      "timestamp": "2025-07-22T12:56:16.157912",
+      "response_data": null
+    },
+    {
+      "test_name": "Error Handling Overall",
+      "success": true,
+      "details": "Passed 3/3 error handling tests",
+      "timestamp": "2025-07-22T12:56:16.157976",
+      "response_data": null
+    },
+    {
+      "test_name": "Invalid Analysis ID",
+      "success": false,
+      "details": "Expected 404, got HTTP 500",
+      "timestamp": "2025-07-22T12:56:16.168682",
+      "response_data": null
+    }
+  ]
+}
